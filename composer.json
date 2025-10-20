@@ -1,0 +1,41 @@
+{
+    "name": "cyclechain/sandboxer",
+    "description": ":package_description",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Fatih Mert Doğancan",
+            "email": "fatih.dogancan@cyclechain.io",
+            "homepage": "https://cyclechain.io"
+        }
+    ],
+    "homepage": "https://github.com/cyclechain/sandboxer",
+    "keywords": ["Laravel", "Sandboxer"],
+    "require": {
+        "illuminate/support": "~9"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "~9.0",
+        "orchestra/testbench": "~7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Cyclechain\\Sandboxer\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Cyclechain\\Sandboxer\\Tests\\": "tests"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Cyclechain\\Sandboxer\\SandboxerServiceProvider"
+            ],
+            "aliases": {
+                "Sandboxer": "Cyclechain\\Sandboxer\\Facades\\Sandboxer"
+            }
+        }
+    }
+}
