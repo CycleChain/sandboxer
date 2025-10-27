@@ -4,6 +4,12 @@ namespace Cyclechain\Sandboxer\Facades;
 
 use Illuminate\Support\Facades\Facade;
 
+/**
+ * @method static bool isActive()
+ * @method static string|null currentId()
+ * 
+ * @see \Cyclechain\Sandboxer\SandboxManager
+ */
 class Sandboxer extends Facade
 {
     /**

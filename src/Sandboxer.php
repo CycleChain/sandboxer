@@ -4,5 +4,13 @@ namespace Cyclechain\Sandboxer;
 
 class Sandboxer
 {
-    // Build wonderful things
+    /**
+     * Test method - returns a greeting message
+     *
+     * @return string
+     */
+    public function hello(): string
+    {
+        return 'Hello from Sandboxer Package! 🚀';
+    }
 }
