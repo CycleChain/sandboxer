@@ -2,7 +2,7 @@
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/cyclechain/sandboxer.svg?style=flat-square)](https://packagist.org/packages/cyclechain/sandboxer)
 [![Total Downloads](https://img.shields.io/packagist/dt/cyclechain/sandboxer.svg?style=flat-square)](https://packagist.org/packages/cyclechain/sandboxer)
-[![License](https://img.shields.io/packagist/l/cyclechain/sandboxer.svg?style=flat-square)](license.md)
+[![License](https://img.shields.io/github/license/CycleChain/sandboxer.svg?style=flat-square)](license.md)
 
 A **zero-modification Laravel package** that provides **complete data isolation** for live product demos, SaaS playgrounds, interactive trial sessions, and testing environments—without altering a single line of your existing models, migrations, or database tables.
 
