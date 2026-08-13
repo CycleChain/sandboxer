@@ -64,7 +64,7 @@ return [
     | Tables that should NOT be sandboxed (like users, sessions, etc.)
     |
     */
-    'excluded_tables' => env('SANDBOXER_EXCLUDED_TABLES', ['users', 'sessions', 'password_reset_tokens', 'migrations']),
+    'excluded_tables' => env('SANDBOXER_EXCLUDED_TABLES', ['users', 'sessions', 'password_reset_tokens', 'migrations', 'sandbox_sessions', 'sandbox_storage']),
 
     /*
     |--------------------------------------------------------------------------

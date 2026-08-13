@@ -62,13 +62,29 @@ class SandboxManager
                 return true;
             }
         }
+
+        // Check domains (wildcard support like demo.*.com, sandbox.*)
+        $domains = config('sandboxer.auto_detection.domains', '');
+        $domainsList = is_array($domains) ? $domains : explode(',', (string) $domains);
+        $host = $request->getHost();
+        foreach ($domainsList as $domainPattern) {
+            $domainPattern = trim($domainPattern);
+            if ($domainPattern && (Str::is($domainPattern, $host) || fnmatch($domainPattern, $host))) {
+                return true;
+            }
+        }
         
         // Check paths
-        $paths = explode(',', config('sandboxer.auto_detection.paths', ''));
-        foreach ($paths as $path) {
-            $path = trim($path);
-            if ($path && $request->is($path . '*')) {
-                return true;
+        $paths = config('sandboxer.auto_detection.paths', '');
+        $pathsList = is_array($paths) ? $paths : explode(',', (string) $paths);
+        $requestPath = ltrim($request->getPathInfo(), '/');
+        foreach ($pathsList as $pathPattern) {
+            $pathPattern = trim($pathPattern);
+            if (!empty($pathPattern)) {
+                $cleanPattern = ltrim($pathPattern, '/');
+                if ($request->is($cleanPattern) || $request->is($cleanPattern . '/*') || Str::is($cleanPattern . '*', $requestPath)) {
+                    return true;
+                }
             }
         }
         
@@ -165,6 +181,11 @@ class SandboxManager
         return $this->currentSandboxId;
     }
     
+    public function hello(): string
+    {
+        return 'Hello from Sandboxer Package! 🚀';
+    }
+
     public function destroy(): void
     {
         if ($this->currentSandboxId) {

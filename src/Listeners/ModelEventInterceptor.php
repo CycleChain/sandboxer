@@ -5,19 +5,15 @@ namespace Cyclechain\Sandboxer\Listeners;
 use Illuminate\Support\Str;
 use Cyclechain\Sandboxer\SandboxManager;
 use Cyclechain\Sandboxer\Storage\StorageManager;
+use Cyclechain\Sandboxer\Scopes\SandboxScope;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Database\Eloquent\Model;
 
 class ModelEventInterceptor
 {
-    protected array $listening = [
-        'eloquent.retrieved*',
-        'eloquent.creating*',
-        'eloquent.updating*',
-        'eloquent.deleting*',
-    ];
-    
     protected StorageManager $storage;
     protected array $processed = [];
+    protected array $pretendingConnections = [];
     
     public function __construct(StorageManager $storage)
     {
@@ -26,115 +22,73 @@ class ModelEventInterceptor
     
     public function subscribe($events)
     {
-        foreach ($this->listening as $event) {
-            $events->listen($event, [$this, 'handle']);
-        }
+        $events->listen('eloquent.booting:*', [$this, 'handleBooting']);
+        
+        $events->listen('eloquent.creating*', [$this, 'handleCreating']);
+        $events->listen('eloquent.created*', [$this, 'handleCreated']);
+        
+        $events->listen('eloquent.updating*', [$this, 'handleUpdating']);
+        $events->listen('eloquent.updated*', [$this, 'handleUpdated']);
+        
+        $events->listen('eloquent.deleting*', [$this, 'handleDeleting']);
+        $events->listen('eloquent.deleted*', [$this, 'handleDeleted']);
     }
-    
-    public function handle($event, $models)
+
+    public function handleBooting($event, $models): void
     {
-        if (!SandboxManager::isActive()) {
-            return;
-        }
-        
-        $sandboxId = SandboxManager::currentId();
-        
-        if (!$sandboxId) {
-            return;
-        }
-        
         [$model] = is_array($models) ? $models : [$models];
-        
-        if (!$model || !method_exists($model, 'getTable')) {
-            return;
-        }
-        
-        // Exclude certain tables from sandbox (like users for authentication)
-        $excludedTables = config('sandboxer.excluded_tables', ['users']);
-        if (in_array($model->getTable(), $excludedTables)) {
-            return;
-        }
-        
-        // Check if already processed to avoid infinite loops
-        $key = get_class($model) . ':' . spl_object_id($model) . ':' . $event;
-        if (isset($this->processed[$key])) {
-            return;
-        }
-        $this->processed[$key] = true;
-        
-        // Clean up old entries to prevent memory leaks
-        if (count($this->processed) > 1000) {
-            $this->processed = [];
-        }
-        
-        switch (true) {
-            case str_contains($event, 'eloquent.retrieved'):
-                $this->handleRetrieved($model, $sandboxId);
-                break;
-            case str_contains($event, 'eloquent.creating'):
-                $this->handleCreating($model, $sandboxId);
-                return false; // Prevent actual save
-            case str_contains($event, 'eloquent.updating'):
-                $this->handleUpdating($model, $sandboxId);
-                return false; // Prevent actual update
-            case str_contains($event, 'eloquent.deleting'):
-                $this->handleDeleting($model, $sandboxId);
-                return false; // Prevent actual delete
-        }
-    }
-    
-    protected function handleRetrieved($model, string $sandboxId): void
-    {
-        $sandboxData = $this->storage->findRecord(
-            $sandboxId,
-            $model->getTable(),
-            $model->getKey()
-        );
-        
-        if ($sandboxData) {
-            if ($sandboxData->operation === 'DELETE') {
-                // Bu kayıt silinmiş gibi davran
-                return;
-            }
-            
-            if ($sandboxData->operation === 'UPDATE' && $sandboxData->changed_fields) {
-                // Değişiklikleri uygula
-                $changes = is_string($sandboxData->changed_fields) 
-                    ? json_decode($sandboxData->changed_fields, true) 
-                    : $sandboxData->changed_fields;
-                
-                $model->forceFill($changes);
+        if ($model && $model instanceof Model) {
+            $modelClass = get_class($model);
+            if (method_exists($modelClass, 'addGlobalScope')) {
+                $modelClass::addGlobalScope(new SandboxScope());
             }
         }
     }
-    
-    protected function handleCreating($model, string $sandboxId): void
+
+    public function handleCreating($event, $models)
     {
-        // Model'in gerçek save edilmesini engelle - sadece sandbox'a kaydet
+        if (!$this->shouldIntercept($event, $models, $model, $sandboxId)) {
+            return;
+        }
+
         $fakeId = $model->getKey() ?? $this->generateId();
-        
+        if (!$model->getKey()) {
+            $model->setAttribute($model->getKeyName(), $fakeId);
+        }
+
+        $model->__sandbox_fake_id = (string) $fakeId;
+
         $this->storage->store([
             'sandbox_id' => $sandboxId,
             'table_name' => $model->getTable(),
-            'record_id' => $fakeId,
+            'record_id' => (string) $fakeId,
             'operation' => 'INSERT',
             'data' => $model->getAttributes(),
             'sequence' => $this->getNextSequence($sandboxId)
         ]);
-        
-        // Fake bir ID set et ki model'in işlem hatası vermesin
-        if (!$model->getKey()) {
-            $model->setAttribute($model->getKeyName(), $fakeId);
-        }
-        
-        // Sync attributes to change the internal state
-        $model->syncOriginal();
-        $model->exists = true;
-        $model->wasRecentlyCreated = true;
+
+        $this->enablePretendMode($model);
     }
-    
-    protected function handleUpdating($model, string $sandboxId): void
+
+    public function handleCreated($event, $models): void
     {
+        [$model] = is_array($models) ? $models : [$models];
+        if ($model && $model instanceof Model) {
+            if (isset($model->__sandbox_fake_id)) {
+                $model->setAttribute($model->getKeyName(), $model->__sandbox_fake_id);
+                $model->syncOriginal();
+                unset($model->__sandbox_fake_id);
+            }
+            $this->disablePretendMode($model);
+        }
+    }
+
+    public function handleUpdating($event, $models)
+    {
+        if (!$this->shouldIntercept($event, $models, $model, $sandboxId)) {
+            return;
+        }
+
         $original = $model->getOriginal();
         $dirty = $model->getDirty();
         
@@ -145,34 +99,116 @@ class ModelEventInterceptor
         $this->storage->store([
             'sandbox_id' => $sandboxId,
             'table_name' => $model->getTable(),
-            'record_id' => $model->getKey(),
+            'record_id' => (string) $model->getKey(),
             'operation' => 'UPDATE',
             'data' => array_merge($original, $dirty),
             'changed_fields' => $dirty,
             'sequence' => $this->getNextSequence($sandboxId)
         ]);
-        
-        // Sync to make the model think it was updated
-        $model->syncOriginal();
+
+        $this->enablePretendMode($model);
     }
-    
-    protected function handleDeleting($model, string $sandboxId): void
+
+    public function handleUpdated($event, $models): void
     {
+        [$model] = is_array($models) ? $models : [$models];
+        if ($model && $model instanceof Model) {
+            $this->disablePretendMode($model);
+        }
+    }
+
+    public function handleDeleting($event, $models)
+    {
+        if (!$this->shouldIntercept($event, $models, $model, $sandboxId)) {
+            return;
+        }
+
         $this->storage->store([
             'sandbox_id' => $sandboxId,
             'table_name' => $model->getTable(),
-            'record_id' => $model->getKey(),
+            'record_id' => (string) $model->getKey(),
             'operation' => 'DELETE',
             'data' => $model->getAttributes(),
             'sequence' => $this->getNextSequence($sandboxId)
         ]);
+
+        $this->enablePretendMode($model);
     }
-    
+
+    public function handleDeleted($event, $models): void
+    {
+        [$model] = is_array($models) ? $models : [$models];
+        if ($model && $model instanceof Model) {
+            $this->disablePretendMode($model);
+        }
+    }
+
+    protected function shouldIntercept($event, $models, &$model, &$sandboxId): bool
+    {
+        if (!SandboxManager::isActive()) {
+            return false;
+        }
+
+        $sandboxId = SandboxManager::currentId();
+        if (!$sandboxId) {
+            return false;
+        }
+
+        [$model] = is_array($models) ? $models : [$models];
+        if (!$model || !($model instanceof Model) || !method_exists($model, 'getTable')) {
+            return false;
+        }
+
+        $excludedTables = array_merge(
+            (array) config('sandboxer.excluded_tables', ['users']),
+            ['sandbox_sessions', 'sandbox_storage']
+        );
+
+        if (in_array($model->getTable(), $excludedTables)) {
+            return false;
+        }
+
+        $modelClass = get_class($model);
+        if (method_exists($modelClass, 'addGlobalScope')) {
+            $modelClass::addGlobalScope(new SandboxScope());
+        }
+
+        return true;
+    }
+
+    protected function enablePretendMode(Model $model): void
+    {
+        $connection = $model->getConnection();
+        $connName = $connection->getName();
+        $ref = new \ReflectionClass($connection);
+        if ($ref->hasProperty('pretending')) {
+            $prop = $ref->getProperty('pretending');
+            $prop->setAccessible(true);
+            $prop->setValue($connection, true);
+            $this->pretendingConnections[$connName] = true;
+        }
+    }
+
+    protected function disablePretendMode(Model $model): void
+    {
+        $connection = $model->getConnection();
+        $connName = $connection->getName();
+        if (isset($this->pretendingConnections[$connName])) {
+            $ref = new \ReflectionClass($connection);
+            if ($ref->hasProperty('pretending')) {
+                $prop = $ref->getProperty('pretending');
+                $prop->setAccessible(true);
+                $prop->setValue($connection, false);
+            }
+            unset($this->pretendingConnections[$connName]);
+        }
+    }
+
     protected function generateId(): string
     {
-        return 'sandbox_' . Str::uuid()->toString();
+        return (string) (time() . sprintf('%04d', mt_rand(1000, 9999)));
     }
-    
+
     protected function getNextSequence(string $sandboxId): int
     {
         $last = \DB::table('sandbox_storage')
