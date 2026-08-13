@@ -10,16 +10,17 @@ A **zero-modification Laravel package** that provides **complete data isolation*
 
 ## 🎯 The Problem Sandboxer Solves
 
-When offering live demos or trial sessions for your SaaS or web application, visitors often want to create, edit, or delete data (e.g., creating blog posts, adding products, modifying settings). 
+When offering live demos or trial sessions for your SaaS or web application, visitors often want to create, edit, or delete data (e.g., creating blog posts, adding products, modifying settings).
 
 Traditionally, developers had to choose between:
+
 1. **Resetting the database periodically**: Interrupts active users and causes data collisions across simultaneous visitors.
 2. **Modifying application logic & models**: Polluting codebase with tenant checks, session filters, or custom traits.
 3. **Spinning up isolated containers per user**: Expensive, slow, and hard to manage at scale.
 
 ### 🚀 The Sandboxer Solution
 
-`Sandboxer` intercepts Eloquent CRUD operations per user session transparently. Any data created, updated, or deleted by a demo visitor exists **only in their isolated sandbox session**. 
+`Sandboxer` intercepts Eloquent CRUD operations per user session transparently. Any data created, updated, or deleted by a demo visitor exists **only in their isolated sandbox session**.
 
 - **Master Database is 100% untouched**: Production data remains safe and pristine.
 - **Zero Model Modifications**: Works out-of-the-box without adding traits or modifying your Eloquent models or migrations.
@@ -250,4 +251,4 @@ The MIT License (MIT). Please see [License File](license.md) for more informatio
 
 ## 👨‍💻 Credits
 
-Developed and maintained by **[Fatih Mert Doğancan](https://github.com/fmdogancan)** & **[CycleChain](https://cyclechain.io)**.
+Developed and maintained by **[Fatih Mert Doğancan](https://github.com/fatihmert)** & **[CycleChain](https://cyclechain.io)**.
